@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Karhu Väistelee</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap');
+
+:root {
+  --bg: #1a0f00;
+  --sky: #2d1b00;
+  --ground: #3d2200;
+  --a1: #ff9a3c;
+  --a2: #ffd93d;
+  --a3: #6bcb77;
+  --a4: #ff6b6b;
+  --text: #ffe8c0;
+  --muted: #a07840;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  min-height: 100vh;
+}
+
+header {
+  width: 100%;
+  padding: 10px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(26,15,0,0.95);
+  border-bottom: 2px solid rgba(255,154,60,0.3);
+  z-index: 10;
+}
+
+.logo {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.4rem;
+  color: var(--a1);
+}
+
+.hud { display: flex; gap: 16px; align-items: center; }
+.hud-item { text-align: center; }
+.hud-label { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.hud-val { font-family: 'Fredoka One', cursive; font-size: 1.2rem; color: var(--a2); line-height: 1; }
+
+.lives { display: flex; gap: 4px; align-items: center; font-size: 1.3rem; }
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 640px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* GAME CANVAS */
+#gameCanvas {
+  width: 100%;
+  border-radius: 16px;
+  border: 3px solid rgba(255,154,60,0.35);
+  background: #1a0f00;
+  display: block;
+  touch-action: none;
+}
+
+/* CAMERA (small, bottom right) */
+.cam-wrap {
+  position: relative;
+  width: 120px;
+  height: 90px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(255,154,60,0.4);
+  background: #000;
+  align-self: flex-end;
+  flex-shrink: 0;
+}
+
+#video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  -webkit-transform: scaleX(-1);
+  transform: scaleX(-1);
+  display: block;
+}
+
+#poseCanvas {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  -webkit-transform: scaleX(-1);
+  transform: scaleX(-1);
+}
+
+.bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.status-row { display: flex; align-items: center; gap: 6px; flex: 1; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.dot.on { background: var(--a3); box-shadow: 0 0 7px var(--a3); }
+.dot.blink { background: var(--a2); animation: blink 1s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+.status-txt { font-size: 0.75rem; color: var(--muted); }
+
+/* MOVE INDICATOR */
+.move-indicator {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.move-chip {
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.move-chip.active {
+  background: rgba(255,154,60,0.2);
+  border-color: var(--a1);
+  color: var(--a1);
+}
+
+/* SCREENS */
+.screen {
+  position: fixed; inset: 0;
+  background: rgba(26,15,0,0.96);
+  z-index: 500;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px; padding: 30px 22px;
+  transition: opacity .3s;
+}
+.screen.hidden { opacity: 0; pointer-events: none; }
+
+.sc-title {
+  font-family: 'Fredoka One', cursive;
+  font-size: 2.6rem; text-align: center;
+  color: var(--a1);
+  text-shadow: 0 0 30px rgba(255,154,60,0.5);
+}
+.sc-em { font-size: 5rem; }
+.screen p { font-size: .9rem; color: var(--muted); text-align: center; line-height: 1.6; max-width: 300px; }
+
+.final { font-family: 'Fredoka One', cursive; font-size: 4.5rem; color: var(--a2); }
+
+.btn {
+  font-family: 'Fredoka One', cursive;
+  font-size: 1.1rem; padding: 12px 30px;
+  border: none; border-radius: 50px; cursor: pointer;
+  transition: transform .12s;
+}
+.btn:active { transform: scale(.95); }
+.btn-p { background: linear-gradient(135deg, var(--a1), #ffb347); color: #1a0f00; box-shadow: 0 5px 18px rgba(255,154,60,.4); }
+.btn-s { background: rgba(255,255,255,.08); color: var(--text); border: 2px solid rgba(255,255,255,.12); }
+
+#loadMsg { font-size: .8rem; color: var(--muted); }
+
+/* FLASH */
+#flash {
+  position: fixed; inset: 0;
+  pointer-events: none; opacity: 0; z-index: 400;
+  transition: opacity .1s;
+}
+#flash.red { background: rgba(255,80,80,.3); opacity: 1; }
+#flash.green { background: rgba(107,203,119,.2); opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="flash"></div>
+
+<!-- START -->
+<div class="screen" id="startScreen">
+  <div class="sc-em">🐻</div>
+  <div class="sc-title">Karhu Väistelee!</div>
+  <p>Ohjaa karhua kehollasi — <strong style="color:var(--a1)">hyppää ylös</strong> tai <strong style="color:var(--a2)">mene kyykkyyn</strong> väistelläksesi tynnyreitä!</p>
+  <p>3 elämää. Vauhti kiihtyy!</p>
+  <p id="loadMsg">⏳ Ladataan...</p>
+  <button class="btn btn-p" id="startBtn" onclick="startGame()" disabled>Aloita! 🎮</button>
+</div>
+
+<!-- GAME OVER -->
+<div class="screen hidden" id="endScreen">
+  <div class="sc-em">💥</div>
+  <div class="sc-title">Peli ohi!</div>
+  <div class="final" id="finalScore">0</div>
+  <p id="finalMsg">pistettä</p>
+  <button class="btn btn-p" onclick="restartGame()">Uudelleen! 🔄</button>
+  <button class="btn btn-s" onclick="showStart()">Etusivu</button>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo">🐻 Karhu</div>
+    <div class="hud">
+      <div class="hud-item">
+        <div class="hud-label">Pisteet</div>
+        <div class="hud-val" id="scoreDisp">0</div>
+      </div>
+      <div class="hud-item">
+        <div class="hud-label">Nopeus</div>
+        <div class="hud-val" id="speedDisp">1x</div>
+      </div>
+      <div class="lives" id="livesDisp">❤️❤️❤️</div>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="bottom-row">
+      <div>
+        <div class="move-indicator">
+          <div class="move-chip" id="chipJump">⬆️ Hyppää</div>
+          <div class="move-chip" id="chipSquat">⬇️ Kyykky</div>
+        </div>
+        <div class="status-row" style="margin-top:6px">
+          <div class="dot" id="statusDot"></div>
+          <span class="status-txt" id="statusTxt">Odotetaan...</span>
+        </div>
+      </div>
+      <div class="cam-wrap">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="poseCanvas"></canvas>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.17.0/dist/tf-core.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.17.0/dist/tf-backend-webgl.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+<script>
+// ═══════════════════════════════════════════
+// GAME CANVAS SETUP
+// ═══════════════════════════════════════════
+const gameCanvas = document.getElementById('gameCanvas');
+const gc = gameCanvas.getContext('2d');
+
+const GW = 480, GH = 280;
+gameCanvas.width = GW;
+gameCanvas.height = GH;
+
+const GROUND_Y = GH - 55;
+const BEAR_X = 80;
+
+// ═══════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════
+let score = 0, lives = 3, gameActive = false;
+let speed = 3.5, speedMult = 1;
+let barrels = [];
+let barrelTimer = 0, barrelInterval = 120;
+let frameCount = 0;
+let invincible = 0; // invincibility frames after hit
+
+// Bear state
+const bear = {
+  y: GROUND_Y,
+  vy: 0,
+  state: 'stand', // stand | jump | squat
+  frame: 0
+};
+
+const JUMP_FORCE = -13;
+const GRAVITY = 0.6;
+const SQUAT_H = 28;
+const STAND_H = 48;
+const BEAR_W = 40;
+
+// ═══════════════════════════════════════════
+// POSE STATE
+// ═══════════════════════════════════════════
+let detector = null;
+let poseState = 'stand'; // stand | jump | squat
+let prevHipY = null;
+let baseHipY = null;
+let calibrationFrames = 0;
+const SCORE_THR = 0.3;
+
+// ═══════════════════════════════════════════
+// BARREL TYPES
+// ═══════════════════════════════════════════
+// type: 'ground' rolls on floor, 'air' flies at mid height
+function spawnBarrel() {
+  const r = Math.random();
+  if (r < 0.55) {
+    barrels.push({ x: GW + 40, y: GROUND_Y + 10, type: 'ground', w: 34, h: 34, rot: 0 });
+  } else {
+    // Air barrel at jump height
+    const airY = GROUND_Y - 55 - Math.random() * 15;
+    barrels.push({ x: GW + 40, y: airY, type: 'air', w: 30, h: 30, rot: 0 });
+  }
+}
+
+// ═══════════════════════════════════════════
+// DRAWING HELPERS
+// ═══════════════════════════════════════════
+function drawBackground() {
+  // Sky gradient
+  const skyGrad = gc.createLinearGradient(0, 0, 0, GH);
+  skyGrad.addColorStop(0, '#0d1a2e');
+  skyGrad.addColorStop(1, '#1a3a1a');
+  gc.fillStyle = skyGrad;
+  gc.fillRect(0, 0, GW, GH);
+
+  // Moon
+  gc.beginPath();
+  gc.arc(GW - 50, 40, 22, 0, Math.PI * 2);
+  gc.fillStyle = '#fffacc';
+  gc.fill();
+  gc.beginPath();
+  gc.arc(GW - 42, 35, 18, 0, Math.PI * 2);
+  gc.fillStyle = '#0d1a2e';
+  gc.fill();
+
+  // Stars
+  gc.fillStyle = 'rgba(255,255,200,0.7)';
+  [[30,20],[80,15],[140,35],[200,10],[280,25],[350,18],[400,40],[60,50]].forEach(([x,y]) => {
+    gc.fillRect(x, y, 2, 2);
+  });
+
+  // Trees (silhouette)
+  gc.fillStyle = '#0d2010';
+  for (let i = 0; i < 6; i++) {
+    const tx = 30 + i * 80 + (frameCount * 0.3 * speedMult % 80);
+    const bx = tx % (GW + 60) - 30;
+    drawTree(bx, GROUND_Y - 10);
+  }
+
+  // Ground
+  gc.fillStyle = '#2d1800';
+  gc.fillRect(0, GROUND_Y + 14, GW, GH - GROUND_Y - 14);
+  gc.fillStyle = '#3d2800';
+  gc.fillRect(0, GROUND_Y + 14, GW, 8);
+
+  // Ground detail lines
+  gc.strokeStyle = 'rgba(80,50,0,0.5)';
+  gc.lineWidth = 1;
+  for (let i = 0; i < 8; i++) {
+    const lx = ((i * 70) - (frameCount * speedMult % 70));
+    gc.beginPath();
+    gc.moveTo(lx, GROUND_Y + 18);
+    gc.lineTo(lx + 30, GROUND_Y + 22);
+    gc.stroke();
+  }
+}
+
+function drawTree(x, y) {
+  // trunk
+  gc.fillStyle = '#1a0d00';
+  gc.fillRect(x - 4, y - 15, 8, 20);
+  // canopy layers
+  gc.fillStyle = '#0d2010';
+  gc.beginPath(); gc.moveTo(x, y-55); gc.lineTo(x-18, y-25); gc.lineTo(x+18, y-25); gc.closePath(); gc.fill();
+  gc.beginPath(); gc.moveTo(x, y-70); gc.lineTo(x-13, y-45); gc.lineTo(x+13, y-45); gc.closePath(); gc.fill();
+}
+
+function drawBear(x, y, state, frame) {
+  const h = state === 'squat' ? SQUAT_H : STAND_H;
+  const w = BEAR_W;
+  const by = y - h; // top of bear
+
+  gc.save();
+
+  if (invincible > 0 && Math.floor(invincible / 4) % 2 === 0) {
+    gc.globalAlpha = 0.4;
+  }
+
+  // Body
+  const bodyColor = '#8B4513';
+  const bellyColor = '#cd853f';
+  const darkBrown = '#5C2D0A';
+
+  if (state === 'squat') {
+    // Squatting bear — wider, lower
+    // Body (oval, squished)
+    gc.fillStyle = bodyColor;
+    gc.beginPath();
+    gc.ellipse(x, by + h * 0.55, w * 0.55, h * 0.45, 0, 0, Math.PI * 2);
+    gc.fill();
+
+    // Belly
+    gc.fillStyle = bellyColor;
+    gc.beginPath();
+    gc.ellipse(x, by + h * 0.6, w * 0.3, h * 0.28, 0, 0, Math.PI * 2);
+    gc.fill();
+
+    // Head
+    gc.fillStyle = bodyColor;
+    gc.beginPath();
+    gc.ellipse(x + 14, by + 12, 16, 14, 0.2, 0, Math.PI * 2);
+    gc.fill();
+
+    // Ears
+    gc.fillStyle = bodyColor;
+    gc.beginPath(); gc.arc(x + 5, by + 2, 6, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 22, by + 0, 6, 0, Math.PI*2); gc.fill();
+    gc.fillStyle = '#ffaaaa';
+    gc.beginPath(); gc.arc(x + 5, by + 2, 3, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 22, by + 0, 3, 0, Math.PI*2); gc.fill();
+
+    // Eyes
+    gc.fillStyle = '#000';
+    gc.beginPath(); gc.arc(x + 10, by + 10, 2.5, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 20, by + 10, 2.5, 0, Math.PI*2); gc.fill();
+    gc.fillStyle = '#fff';
+    gc.beginPath(); gc.arc(x + 11, by + 9, 1, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 21, by + 9, 1, 0, Math.PI*2); gc.fill();
+
+    // Snout
+    gc.fillStyle = bellyColor;
+    gc.beginPath(); gc.ellipse(x + 16, by + 16, 7, 5, 0, 0, Math.PI*2); gc.fill();
+    gc.fillStyle = '#000';
+    gc.beginPath(); gc.arc(x + 16, by + 14, 2, 0, Math.PI*2); gc.fill();
+
+    // Legs (stubby, spread out)
+    gc.fillStyle = darkBrown;
+    gc.beginPath(); gc.ellipse(x - 10, by + h - 4, 9, 7, -0.4, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.ellipse(x + 10, by + h - 4, 9, 7, 0.4, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.ellipse(x - 22, by + h * 0.5, 7, 9, -0.3, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.ellipse(x + 24, by + h * 0.5, 7, 9, 0.3, 0, Math.PI*2); gc.fill();
+
+  } else {
+    // Standing / jumping bear
+    const bobY = state === 'stand' ? Math.sin(frame * 0.12) * 2 : 0;
+
+    // Body
+    gc.fillStyle = bodyColor;
+    gc.beginPath();
+    gc.ellipse(x, by + h * 0.62 + bobY, w * 0.42, h * 0.38, 0, 0, Math.PI * 2);
+    gc.fill();
+
+    // Belly
+    gc.fillStyle = bellyColor;
+    gc.beginPath();
+    gc.ellipse(x, by + h * 0.65 + bobY, w * 0.25, h * 0.24, 0, 0, Math.PI * 2);
+    gc.fill();
+
+    // Legs
+    gc.fillStyle = darkBrown;
+    const legSwing = state === 'stand' ? Math.sin(frame * 0.18) * 5 : 0;
+    // Left leg
+    gc.beginPath();
+    gc.ellipse(x - 10, by + h - 4 + bobY, 8, 12, legSwing * 0.05, 0, Math.PI*2);
+    gc.fill();
+    // Right leg
+    gc.beginPath();
+    gc.ellipse(x + 10, by + h - 4 + bobY, 8, 12, -legSwing * 0.05, 0, Math.PI*2);
+    gc.fill();
+
+    // Arms
+    const armSwing = state === 'jump' ? -0.6 : Math.sin(frame * 0.18) * 0.3;
+    gc.fillStyle = bodyColor;
+    gc.beginPath();
+    gc.ellipse(x - 20, by + h * 0.52 + bobY, 7, 12, armSwing, 0, Math.PI*2);
+    gc.fill();
+    gc.beginPath();
+    gc.ellipse(x + 20, by + h * 0.52 + bobY, 7, 12, -armSwing, 0, Math.PI*2);
+    gc.fill();
+
+    // Head
+    gc.fillStyle = bodyColor;
+    gc.beginPath();
+    gc.ellipse(x, by + 16 + bobY, 18, 16, 0, 0, Math.PI * 2);
+    gc.fill();
+
+    // Ears
+    gc.fillStyle = bodyColor;
+    gc.beginPath(); gc.arc(x - 12, by + 4 + bobY, 7, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 12, by + 4 + bobY, 7, 0, Math.PI*2); gc.fill();
+    gc.fillStyle = '#ffaaaa';
+    gc.beginPath(); gc.arc(x - 12, by + 4 + bobY, 3.5, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 12, by + 4 + bobY, 3.5, 0, Math.PI*2); gc.fill();
+
+    // Eyes — happy when running, wide when jumping
+    const eyeScale = state === 'jump' ? 1.4 : 1;
+    gc.fillStyle = '#000';
+    gc.beginPath(); gc.arc(x - 7, by + 14 + bobY, 2.5 * eyeScale, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 7, by + 14 + bobY, 2.5 * eyeScale, 0, Math.PI*2); gc.fill();
+    gc.fillStyle = '#fff';
+    gc.beginPath(); gc.arc(x - 6, by + 13 + bobY, 1, 0, Math.PI*2); gc.fill();
+    gc.beginPath(); gc.arc(x + 8, by + 13 + bobY, 1, 0, Math.PI*2); gc.fill();
+
+    // Snout
+    gc.fillStyle = bellyColor;
+    gc.beginPath(); gc.ellipse(x, by + 22 + bobY, 9, 6, 0, 0, Math.PI*2); gc.fill();
+    gc.fillStyle = '#000';
+    gc.beginPath(); gc.arc(x, by + 19 + bobY, 2.5, 0, Math.PI*2); gc.fill();
+
+    // Smile (stand only)
+    if (state === 'stand') {
+      gc.strokeStyle = '#000'; gc.lineWidth = 1.5;
+      gc.beginPath();
+      gc.arc(x, by + 22 + bobY, 5, 0.2, Math.PI - 0.2);
+      gc.stroke();
+    }
+  }
+
+  gc.restore();
+}
+
+function drawBarrel(b) {
+  gc.save();
+  gc.translate(b.x, b.y);
+  gc.rotate(b.rot);
+
+  const w = b.w, h = b.h;
+  const isAir = b.type === 'air';
+  const bodyColor = isAir ? '#8B6914' : '#6B3A10';
+  const bandColor = isAir ? '#c8a830' : '#3d1a00';
+
+  // Barrel body
+  gc.fillStyle = bodyColor;
+  gc.beginPath();
+  gc.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI*2);
+  gc.fill();
+
+  // Barrel bands
+  gc.strokeStyle = bandColor;
+  gc.lineWidth = 3;
+  gc.beginPath(); gc.ellipse(0, -h*0.2, w/2 * 0.92, 4, 0, 0, Math.PI*2); gc.stroke();
+  gc.beginPath(); gc.ellipse(0, h*0.2, w/2 * 0.92, 4, 0, 0, Math.PI*2); gc.stroke();
+
+  // Top/bottom caps
+  gc.strokeStyle = bandColor;
+  gc.lineWidth = 2.5;
+  gc.beginPath(); gc.ellipse(0, -h/2 + 3, w/2 - 4, 5, 0, 0, Math.PI*2); gc.stroke();
+  gc.beginPath(); gc.ellipse(0, h/2 - 3, w/2 - 4, 5, 0, 0, Math.PI*2); gc.stroke();
+
+  // Wood grain lines
+  gc.strokeStyle = isAir ? 'rgba(200,180,50,0.2)' : 'rgba(100,50,0,0.25)';
+  gc.lineWidth = 1;
+  for (let i = -1; i <= 1; i++) {
+    gc.beginPath();
+    gc.moveTo(i * w * 0.25, -h/2 + 5);
+    gc.lineTo(i * w * 0.25, h/2 - 5);
+    gc.stroke();
+  }
+
+  // Air barrel glow
+  if (isAir) {
+    gc.shadowColor = '#ffd700';
+    gc.shadowBlur = 12;
+    gc.strokeStyle = 'rgba(255,215,0,0.4)';
+    gc.lineWidth = 2;
+    gc.beginPath(); gc.ellipse(0, 0, w/2 + 2, h/2 + 2, 0, 0, Math.PI*2); gc.stroke();
+    gc.shadowBlur = 0;
+  }
+
+  gc.restore();
+}
+
+function drawScore() {
+  gc.fillStyle = 'rgba(0,0,0,0.35)';
+  gc.beginPath();
+  gc.roundRect(8, 8, 100, 28, 8);
+  gc.fill();
+  gc.fillStyle = '#ffd93d';
+  gc.font = 'bold 15px Fredoka One, cursive';
+  gc.fillText('🏃 ' + score, 16, 27);
+}
+
+function drawSpeedBar() {
+  const barW = 80, barH = 8;
+  const bx = GW - barW - 10, by2 = 12;
+  gc.fillStyle = 'rgba(0,0,0,0.35)';
+  gc.beginPath(); gc.roundRect(bx - 2, by2 - 2, barW + 4, barH + 4, 5); gc.fill();
+  const prog = Math.min((speedMult - 1) / 3, 1);
+  const barColor = prog < 0.4 ? '#6bcb77' : prog < 0.7 ? '#ffd93d' : '#ff6b6b';
+  gc.fillStyle = 'rgba(255,255,255,0.1)';
+  gc.fillRect(bx, by2, barW, barH);
+  gc.fillStyle = barColor;
+  gc.fillRect(bx, by2, barW * prog, barH);
+}
+
+// ═══════════════════════════════════════════
+// COLLISION
+// ═══════════════════════════════════════════
+function getBearBox() {
+  const h = bear.state === 'squat' ? SQUAT_H : STAND_H;
+  return {
+    x: BEAR_X - BEAR_W * 0.4,
+    y: bear.y - h,
+    w: BEAR_W * 0.8,
+    h: h * 0.85
+  };
+}
+
+function getBarrelBox(b) {
+  return { x: b.x - b.w * 0.42, y: b.y - b.h * 0.42, w: b.w * 0.84, h: b.h * 0.84 };
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// ═══════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════
+let lastTime = 0;
+let animId = null;
+
+function gameLoop(ts) {
+  if (!gameActive) return;
+  frameCount++;
+  bear.frame++;
+
+  // Apply pose to bear
+  if (poseState === 'jump' && bear.state !== 'jump' && bear.y >= GROUND_Y - 2) {
+    bear.vy = JUMP_FORCE;
+    bear.state = 'jump';
+  } else if (poseState === 'squat') {
+    if (bear.y >= GROUND_Y - 2) bear.state = 'squat';
+  } else {
+    if (bear.y >= GROUND_Y - 2) bear.state = 'stand';
+  }
+
+  // Physics
+  if (bear.state === 'jump' || bear.y < GROUND_Y) {
+    bear.vy += GRAVITY;
+    bear.y += bear.vy;
+    if (bear.y >= GROUND_Y) {
+      bear.y = GROUND_Y;
+      bear.vy = 0;
+      bear.state = poseState === 'squat' ? 'squat' : 'stand';
+    }
+  }
+
+  // Speed ramp (every 200 frames add a little)
+  speedMult = 1 + Math.floor(frameCount / 200) * 0.15;
+  const currentSpeed = speed * speedMult;
+
+  // Barrel spawning
+  barrelTimer++;
+  const interval = Math.max(55, barrelInterval - Math.floor(frameCount / 300) * 8);
+  if (barrelTimer >= interval) {
+    spawnBarrel();
+    barrelTimer = 0;
+  }
+
+  // Move barrels
+  for (let i = barrels.length - 1; i >= 0; i--) {
+    const b = barrels[i];
+    b.x -= currentSpeed;
+    if (b.type === 'ground') b.rot += currentSpeed * 0.04;
+    if (b.x < -60) { barrels.splice(i, 1); score++; updateHUD(); continue; }
+
+    // Collision
+    if (invincible <= 0 && rectsOverlap(getBearBox(), getBarrelBox(b))) {
+      barrels.splice(i, 1);
+      lives--;
+      invincible = 90;
+      updateHUD();
+      showFlash('red');
+      if (lives <= 0) { endGame(); return; }
+    }
+  }
+
+  if (invincible > 0) invincible--;
+
+  // Score over time
+  if (frameCount % 30 === 0) { score++; updateHUD(); }
+
+  // DRAW
+  drawBackground();
+  drawSpeedBar();
+
+  barrels.forEach(b => drawBarrel(b));
+  drawBear(BEAR_X, bear.y, bear.state, bear.frame);
+
+  // Collision debug (off)
+  // const bb = getBearBox(); gc.strokeStyle='lime'; gc.strokeRect(bb.x,bb.y,bb.w,bb.h);
+
+  animId = requestAnimationFrame(gameLoop);
+}
+
+function updateHUD() {
+  document.getElementById('scoreDisp').textContent = score;
+  document.getElementById('speedDisp').textContent = speedMult.toFixed(1) + 'x';
+  const hearts = ['', '❤️', '❤️❤️', '❤️❤️❤️'];
+  document.getElementById('livesDisp').textContent = hearts[Math.max(0, lives)] || '💀';
+}
+
+function showFlash(type) {
+  const f = document.getElementById('flash');
+  f.className = type;
+  setTimeout(() => f.className = '', 200);
+}
+
+// ═══════════════════════════════════════════
+// POSE DETECTION
+// ═══════════════════════════════════════════
+const video = document.getElementById('video');
+const poseCanvas = document.getElementById('poseCanvas');
+const pc = poseCanvas.getContext('2d');
+
+function kp(lm, idx) {
+  const p = lm[idx];
+  return (p && p.score > SCORE_THR) ? p : null;
+}
+
+function normLm(kps) {
+  const w = video.videoWidth || 640;
+  const h = video.videoHeight || 480;
+  return kps.map(p => ({ ...p, x: p.x / w, y: p.y / h }));
+}
+
+// Pose detection: compare hip Y to baseline
+function detectPoseState(kps) {
+  const lm = normLm(kps);
+  const lh = kp(lm, 11), rh = kp(lm, 12); // shoulders (MoveNet idx 5,6 = shoulders, 11,12 = hips)
+  const lHip = kp(lm, 11), rHip = kp(lm, 12);
+  const lShoulder = kp(lm, 5), rShoulder = kp(lm, 6);
+  const lKnee = kp(lm, 13), rKnee = kp(lm, 14);
+  const nose = kp(lm, 0);
+
+  if (!lShoulder || !rShoulder) return 'stand';
+
+  const shoulderY = (lShoulder.y + rShoulder.y) / 2;
+
+  // Calibrate baseline
+  if (baseHipY === null) {
+    calibrationFrames++;
+    if (calibrationFrames > 20) baseHipY = shoulderY;
+    return 'stand';
+  }
+
+  const delta = shoulderY - baseHipY;
+
+  // Squat: shoulders drop significantly
+  if (delta > 0.10) return 'squat';
+  // Jump: shoulders rise significantly
+  if (delta < -0.09) return 'jump';
+  return 'stand';
+}
+
+const CONNECTIONS = [
+  [5,6],[5,7],[7,9],[6,8],[8,10],
+  [5,11],[6,12],[11,12],
+  [11,13],[13,15],[12,14],[14,16]
+];
+
+async function detectLoop() {
+  if (!detector) { requestAnimationFrame(detectLoop); return; }
+  if (!video.readyState || video.readyState < 2) { requestAnimationFrame(detectLoop); return; }
+
+  try {
+    const poses = await detector.estimatePoses(video);
+    pc.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+
+    if (poses.length > 0) {
+      const kps = poses[0].keypoints;
+      poseState = detectPoseState(kps);
+
+      // Draw mini skeleton
+      const sx = poseCanvas.width / (video.videoWidth || 640);
+      const sy = poseCanvas.height / (video.videoHeight || 480);
+      pc.strokeStyle = 'rgba(77,150,255,0.5)';
+      pc.lineWidth = 1.5;
+      CONNECTIONS.forEach(([a,b]) => {
+        const pa = kps[a], pb = kps[b];
+        if (pa && pb && pa.score > SCORE_THR && pb.score > SCORE_THR) {
+          pc.beginPath();
+          pc.moveTo(pa.x * sx, pa.y * sy);
+          pc.lineTo(pb.x * sx, pb.y * sy);
+          pc.stroke();
+        }
+      });
+      kps.forEach(p => {
+        if (p.score > SCORE_THR) {
+          pc.beginPath();
+          pc.arc(p.x * sx, p.y * sy, 3, 0, Math.PI*2);
+          pc.fillStyle = 'rgba(255,107,107,0.7)';
+          pc.fill();
+        }
+      });
+
+      document.getElementById('statusDot').className = 'dot on';
+      document.getElementById('statusTxt').textContent = 'Hahmo tunnistettu ✓';
+
+      // Move chips
+      document.getElementById('chipJump').className = 'move-chip' + (poseState === 'jump' ? ' active' : '');
+      document.getElementById('chipSquat').className = 'move-chip' + (poseState === 'squat' ? ' active' : '');
+
+    } else {
+      poseState = 'stand';
+      document.getElementById('statusDot').className = 'dot blink';
+      document.getElementById('statusTxt').textContent = 'Asetu kameran eteen...';
+      document.getElementById('chipJump').className = 'move-chip';
+      document.getElementById('chipSquat').className = 'move-chip';
+    }
+  } catch(e) {}
+
+  requestAnimationFrame(detectLoop);
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+async function init() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await new Promise(r => { video.onloadedmetadata = r; });
+    poseCanvas.width = video.videoWidth || 640;
+    poseCanvas.height = video.videoHeight || 480;
+  } catch(e) {
+    document.getElementById('loadMsg').textContent = '⚠️ Kamera ei toimi. Tarkista luvat.';
+    return;
+  }
+
+  try {
+    await tf.setBackend('webgl');
+    await tf.ready();
+  } catch(e) {
+    await tf.setBackend('cpu');
+    await tf.ready();
+  }
+
+  detector = await poseDetection.createDetector(
+    poseDetection.SupportedModels.MoveNet,
+    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+  );
+
+  document.getElementById('loadMsg').textContent = '✅ Valmis!';
+  document.getElementById('startBtn').disabled = false;
+
+  detectLoop();
+
+  // Draw idle screen
+  drawIdleScreen();
+}
+
+function drawIdleScreen() {
+  gc.clearRect(0, 0, GW, GH);
+  drawBackground();
+  drawBear(BEAR_X, GROUND_Y, 'stand', Date.now() * 0.05);
+  if (!gameActive) requestAnimationFrame(drawIdleScreen);
+}
+
+function startGame() {
+  document.getElementById('startScreen').classList.add('hidden');
+  score = 0; lives = 3; frameCount = 0; speedMult = 1;
+  barrels = []; barrelTimer = 0;
+  bear.y = GROUND_Y; bear.vy = 0; bear.state = 'stand'; bear.frame = 0;
+  baseHipY = null; calibrationFrames = 0; invincible = 0;
+  gameActive = true;
+  updateHUD();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  gameActive = false;
+  cancelAnimationFrame(animId);
+  document.getElementById('finalScore').textContent = score;
+  document.getElementById('finalMsg').textContent =
+    score > 100 ? `pistettä — Mahtava karhu! 🐻` :
+    score > 50  ? `pistettä — Hyvin meni! 👏` : `pistettä — Harjoittele lisää! 💪`;
+  document.getElementById('endScreen').classList.remove('hidden');
+}
+
+function restartGame() {
+  document.getElementById('endScreen').classList.add('hidden');
+  startGame();
+}
+
+function showStart() {
+  document.getElementById('endScreen').classList.add('hidden');
+  document.getElementById('startScreen').classList.remove('hidden');
+  drawIdleScreen();
+}
+
+init();
+</script>
+</body>
+</html>
